@@ -6,33 +6,40 @@
 </head>
 <body>
   <div class="popup">
-    <h1 class="popup-title">Link Peek</h1>
-
-    <div class="section">
-      <div class="toggle-row">
-        <label for="site-toggle">Enable on this site</label>
-        <button id="site-toggle" class="toggle" role="switch" aria-checked="true">
-          <span class="toggle-slider"></span>
-        </button>
-      </div>
+    <div class="popup-header">
+      <h1 class="popup-title">Marginalia</h1>
       <div class="site-name" id="site-name"></div>
     </div>
 
-    <hr>
+    <div class="toggle-row">
+      <label for="site-toggle">Enable on this site</label>
+      <button id="site-toggle" class="toggle" role="switch" aria-checked="true">
+        <span class="toggle-slider"></span>
+      </button>
+    </div>
 
     <div class="section">
-      <div class="toggle-row">
-        <label for="modifier-toggle">Require Cmd/Ctrl key</label>
-        <button id="modifier-toggle" class="toggle" role="switch" aria-checked="true">
-          <span class="toggle-slider"></span>
-        </button>
+      <label class="section-label">Shortcuts</label>
+      <div class="shortcut-row">
+        <span class="shortcut-label">Link preview</span>
+        <div class="segmented-control mode-row">
+          <button class="seg-btn mode-btn" data-mode="altHover" id="alt-hover-btn">Alt + Hover</button>
+          <button class="seg-btn mode-btn" data-mode="longPress">Long Press</button>
+        </div>
+      </div>
+      <div class="shortcut-row">
+        <div class="shortcut-row-label">
+          <span class="shortcut-label">Page note</span>
+          <div class="shortcut-row-inner">
+            <kbd class="shortcut-key" id="note-shortcut"></kbd>
+            <a href="#" id="change-shortcuts" class="change-shortcuts-link">Change</a>
+          </div>
+        </div>
       </div>
     </div>
 
-    <hr>
-
-    <div class="section">
-      <label class="section-label">Default panel size</label>
+    <div class="section" style="margin-top: -12px !important;">
+      <label class="section-label">Panel size</label>
       <div class="size-row">
         <div class="size-field">
           <label for="width-input">W</label>
@@ -46,15 +53,20 @@
       </div>
     </div>
 
-    <hr>
-
     <div class="section">
       <label class="section-label">Theme</label>
-      <div class="theme-row">
-        <button class="theme-btn" data-theme="light">Light</button>
-        <button class="theme-btn" data-theme="dark">Dark</button>
-        <button class="theme-btn" data-theme="system">System</button>
+      <div class="segmented-control theme-row">
+        <button class="seg-btn theme-btn" data-theme="light">Light</button>
+        <button class="seg-btn theme-btn" data-theme="dark">Dark</button>
+        <button class="seg-btn theme-btn" data-theme="system">System</button>
       </div>
+    </div>
+
+    <div class="section">
+      <button id="open-notes-btn" class="notes-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+        Open Notebook
+      </button>
     </div>
   </div>
 

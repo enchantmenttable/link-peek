@@ -1,13 +1,16 @@
-import { PeekPanel } from './panel.js';
+import { PeekPanel, getActiveNotePanel, clearActiveNotePanel } from './panel.js';
 import { extractContent } from './extract.js';
-import { getSettings, isSiteDisabled } from '../shared/storage.js';
-import { MSG } from '../shared/constants.js';
+import { getSettings, isSiteDisabled, getNoteForUrl } from '../shared/storage.js';
+import { MSG, STORAGE_KEYS } from '../shared/constants.js';
 
 let hoverTimer = null;
 let currentLink = null;
 let settings = null;
-let modifierDown = false;
+let altDown = false;
 let openDelay = 250;
+let longPressTimer = null;
+let longPressDelay = 500;
+let enabled = false;
 
 // Track all open panels and which links have panels
 const panels = new Set();
@@ -17,21 +20,40 @@ const linkToPanelMap = new WeakMap();
 const cache = new Map();
 
 async function init() {
-  const disabled = await isSiteDisabled(location.hostname);
-  if (disabled) return;
-
   settings = await getSettings();
 
-  document.addEventListener('mouseover', onMouseOver);
-  document.addEventListener('mouseout', onMouseOut);
-  document.addEventListener('keydown', onKeyDown);
-  document.addEventListener('keyup', onKeyUp);
-  document.addEventListener('keydown', onEscape);
+  const disabled = await isSiteDisabled(location.hostname);
+  if (!disabled) enable();
 
-  // Listen for settings changes
-  chrome.storage.onChanged.addListener((changes) => {
-    if (changes.settings) {
-      settings = { ...settings, ...changes.settings.newValue };
+  // Listen for disabled-sites changes to enable/disable live
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes[STORAGE_KEYS.DISABLED_SITES]) {
+      const sites = changes[STORAGE_KEYS.DISABLED_SITES].newValue || [];
+      if (sites.includes(location.hostname)) {
+        disable();
+      } else {
+        enable();
+      }
+    }
+    if (changes[STORAGE_KEYS.SETTINGS]) {
+      const prev = settings;
+      settings = { ...settings, ...changes[STORAGE_KEYS.SETTINGS].newValue };
+      if (settings.theme !== prev.theme) {
+        panels.forEach(p => {
+          if (p.isOpen) p.applyTheme(settings.theme);
+          if (p._notePanel && p._notePanel.isOpen) p._notePanel.applyTheme(settings.theme);
+        });
+      }
+    }
+  });
+
+  // Listen for messages from background (context menu, keyboard shortcut)
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message.type === MSG.OPEN_PEEK_PANEL && message.url) {
+      openPanelForUrl(message.url);
+    }
+    if (message.type === MSG.OPEN_PAGE_NOTE) {
+      openPageNote();
     }
   });
 
@@ -43,6 +65,41 @@ async function init() {
       });
     }
   });
+}
+
+function enable() {
+  if (enabled) return;
+  enabled = true;
+
+  document.addEventListener('mouseover', onMouseOver);
+  document.addEventListener('mouseout', onMouseOut);
+  document.addEventListener('keydown', onKeyDown);
+  document.addEventListener('keyup', onKeyUp);
+  document.addEventListener('keydown', onEscape);
+  document.addEventListener('mousedown', onMouseDown);
+  document.addEventListener('mouseup', onMouseUp);
+  document.addEventListener('mousemove', onMouseMoveForLongPress);
+}
+
+function disable() {
+  if (!enabled) return;
+  enabled = false;
+
+  document.removeEventListener('mouseover', onMouseOver);
+  document.removeEventListener('mouseout', onMouseOut);
+  document.removeEventListener('keydown', onKeyDown);
+  document.removeEventListener('keyup', onKeyUp);
+  document.removeEventListener('keydown', onEscape);
+  document.removeEventListener('mousedown', onMouseDown);
+  document.removeEventListener('mouseup', onMouseUp);
+  document.removeEventListener('mousemove', onMouseMoveForLongPress);
+
+  // Close all open panels
+  panels.forEach(p => { if (p.isOpen) p.destroy(); });
+  clearHoverTimer();
+  clearLongPressTimer();
+  altDown = false;
+  currentLink = null;
 }
 
 function isValidLink(el) {
@@ -64,30 +121,26 @@ function isValidLink(el) {
   return link;
 }
 
+// --- Alt + Hover mode ---
+
 function onMouseOver(e) {
-  // Don't trigger inside our panel
   if (e.target.closest?.('.link-peek-host')) return;
 
   const link = isValidLink(e.target);
   if (!link) return;
 
-  // Always track which link is hovered (for modifier key trigger later)
   currentLink = link;
 
-  // Check modifier requirement
-  if (settings.requireModifier && !modifierDown) return;
+  // Only trigger on hover in altHover mode when Alt is held
+  if (settings.triggerMode !== 'altHover' || !altDown) return;
 
-  // If this link already has an open panel, cancel its close instead
   const existingPanel = linkToPanelMap.get(link);
   if (existingPanel && existingPanel.isOpen) {
     existingPanel.cancelClose();
     return;
   }
 
-  // Clear any pending hover
   clearHoverTimer();
-
-  // Start delay
   hoverTimer = setTimeout(() => {
     showPanel(link);
   }, openDelay);
@@ -96,11 +149,9 @@ function onMouseOver(e) {
 function onMouseOut(e) {
   const link = isValidLink(e.target);
 
-  // If leaving the current link
   if (link === currentLink) {
     clearHoverTimer();
 
-    // Schedule close on this link's panel if it has one
     const existingPanel = linkToPanelMap.get(link);
     if (existingPanel && existingPanel.isOpen) {
       existingPanel.scheduleClose();
@@ -111,11 +162,11 @@ function onMouseOut(e) {
 }
 
 function onKeyDown(e) {
-  if (e.key === 'Meta' || e.key === 'Control') {
-    modifierDown = true;
+  if (e.key === 'Alt') {
+    altDown = true;
 
-    // If already hovering a link and modifier is now pressed, start timer
-    if (settings.requireModifier && currentLink && !linkToPanelMap.has(currentLink)) {
+    // In altHover mode, if already hovering a link, start timer
+    if (settings.triggerMode === 'altHover' && currentLink && !linkToPanelMap.has(currentLink)) {
       clearHoverTimer();
       hoverTimer = setTimeout(() => {
         showPanel(currentLink);
@@ -125,14 +176,63 @@ function onKeyDown(e) {
 }
 
 function onKeyUp(e) {
-  if (e.key === 'Meta' || e.key === 'Control') {
-    modifierDown = false;
+  if (e.key === 'Alt') {
+    altDown = false;
   }
 }
 
+// --- Long Press mode ---
+
+let longPressLink = null;
+
+function onMouseDown(e) {
+  if (settings.triggerMode !== 'longPress') return;
+  if (e.button !== 0) return; // left click only
+
+  const link = isValidLink(e.target);
+  if (!link) return;
+
+  const existingPanel = linkToPanelMap.get(link);
+  if (existingPanel && existingPanel.isOpen) return;
+
+  longPressLink = link;
+  clearLongPressTimer();
+  longPressTimer = setTimeout(() => {
+    // Prevent the click from navigating
+    link.addEventListener('click', preventClick, { once: true, capture: true });
+    showPanel(link);
+    longPressLink = null;
+  }, longPressDelay);
+}
+
+function onMouseUp() {
+  clearLongPressTimer();
+  longPressLink = null;
+}
+
+function onMouseMoveForLongPress() {
+  // Cancel long press if mouse moves too much
+  if (!longPressLink) return;
+  clearLongPressTimer();
+  longPressLink = null;
+}
+
+function preventClick(e) {
+  e.preventDefault();
+  e.stopPropagation();
+}
+
+function clearLongPressTimer() {
+  if (longPressTimer) {
+    clearTimeout(longPressTimer);
+    longPressTimer = null;
+  }
+}
+
+// --- Escape ---
+
 function onEscape(e) {
   if (e.key === 'Escape') {
-    // Close all unpinned panels, or if all are pinned, close the most recent
     let closedAny = false;
     panels.forEach(p => {
       if (p.isOpen && !p.pinned) {
@@ -141,7 +241,6 @@ function onEscape(e) {
       }
     });
     if (!closedAny) {
-      // Close the last opened pinned panel
       const arr = [...panels];
       for (let i = arr.length - 1; i >= 0; i--) {
         if (arr[i].isOpen) {
@@ -160,6 +259,63 @@ function clearHoverTimer() {
   }
 }
 
+function trackNotePanels(panel) {
+  panel.onNotePanel = (notePanel) => {
+    panels.add(notePanel);
+    const origOnClose = notePanel.onClose;
+    notePanel.onClose = () => {
+      panels.delete(notePanel);
+      if (origOnClose) origOnClose();
+    };
+  };
+}
+
+// --- Open panel for a URL (used by context menu) ---
+
+async function openPanelForUrl(url) {
+  const panel = new PeekPanel();
+  panels.add(panel);
+
+  panel.create(settings.defaultWidth, settings.defaultHeight, settings.theme);
+  panel.setUrl(url);
+  trackNotePanels(panel);
+
+  // Center it
+  const w = panel.panel.offsetWidth;
+  const h = panel.panel.offsetHeight;
+  panel.panel.style.left = Math.max(8, (window.innerWidth - w) / 2) + 'px';
+  panel.panel.style.top = Math.max(8, (window.innerHeight - h) / 2) + 'px';
+
+  panel.pin();
+  panel.showCloseButton();
+  panel.setLoading();
+
+  panel.onClose = () => {
+    panels.delete(panel);
+  };
+
+  try {
+    let result;
+    if (cache.has(url)) {
+      result = cache.get(url);
+    } else {
+      const response = await chrome.runtime.sendMessage({ type: MSG.FETCH_URL, url });
+      if (!panel.isOpen) return;
+      if (!response || !response.success) {
+        panel.setError(response?.error || 'Failed to load preview');
+        return;
+      }
+      result = extractContent(response.html, url);
+      cache.set(url, result);
+    }
+    panel.setContent(result.content, result.title);
+  } catch {
+    if (panel.isOpen) panel.setError('Failed to load preview');
+  }
+}
+
+// --- Show panel (from hover/longpress on a link element) ---
+
 async function showPanel(link) {
   const url = link.href;
   const rect = link.getBoundingClientRect();
@@ -169,10 +325,11 @@ async function showPanel(link) {
   linkToPanelMap.set(link, panel);
 
   panel.create(settings.defaultWidth, settings.defaultHeight, settings.theme);
+  panel.setUrl(url);
+  trackNotePanels(panel);
   panel.position(rect);
   panel.setLoading();
 
-  // Mouse re-enter on the link should cancel close
   const linkEnterHandler = () => panel.cancelClose();
   const linkLeaveHandler = () => {
     if (panel.isOpen) panel.scheduleClose();
@@ -188,7 +345,6 @@ async function showPanel(link) {
     if (currentLink === link) currentLink = null;
   };
 
-  // Check cache first
   if (cache.has(url)) {
     const cached = cache.get(url);
     panel.setContent(cached.content, cached.title);
@@ -201,7 +357,6 @@ async function showPanel(link) {
       url: url,
     });
 
-    // Panel may have been closed while waiting
     if (!panel.isOpen) return;
 
     if (!response || !response.success) {
@@ -217,6 +372,44 @@ async function showPanel(link) {
       panel.setError('Failed to load preview');
     }
   }
+}
+
+// --- Page note (Alt+N) ---
+
+let pageNotePanel = null;
+
+async function openPageNote() {
+  // If any note panel is already open (from peek panel or Alt+N), don't open another
+  const existing = getActiveNotePanel();
+  if (existing && existing.isOpen) return;
+  if (pageNotePanel && pageNotePanel.isOpen) return;
+
+  const url = location.href;
+  const panel = new PeekPanel();
+  panels.add(panel);
+  pageNotePanel = panel;
+
+  panel.create(settings.defaultWidth, settings.defaultHeight, settings.theme);
+  panel.setUrl(url);
+  panel.noteBtn.style.display = 'none';
+
+  const w = panel.panel.offsetWidth;
+  const h = panel.panel.offsetHeight;
+  panel.panel.style.left = Math.max(8, (window.innerWidth - w) / 2) + 'px';
+  panel.panel.style.top = Math.max(8, (window.innerHeight - h) / 2) + 'px';
+
+  panel.pin();
+  panel.showCloseButton();
+  panel.titleText.textContent = 'Note';
+
+  panel.onClose = () => {
+    panels.delete(panel);
+    pageNotePanel = null;
+    clearActiveNotePanel();
+  };
+
+  const note = await getNoteForUrl(url);
+  panel._openNoteInline(note || { title: document.title, content: '' });
 }
 
 init();

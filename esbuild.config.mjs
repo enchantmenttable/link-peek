@@ -21,6 +21,12 @@ await Promise.all([
     format: 'iife',
     outfile: 'dist/popup.js',
   }),
+  esbuild.build({
+    entryPoints: ['src/options/options.js'],
+    bundle: true,
+    format: 'iife',
+    outfile: 'dist/options.js',
+  }),
 ]);
 
 // Copy public files to dist

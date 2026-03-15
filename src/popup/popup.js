@@ -2,7 +2,7 @@ import { getSettings, saveSettings, getDisabledSites, setDisabledSites } from '.
 
 const siteToggle = document.getElementById('site-toggle');
 const siteName = document.getElementById('site-name');
-const modifierToggle = document.getElementById('modifier-toggle');
+const modeButtons = document.querySelectorAll('.mode-btn');
 const widthInput = document.getElementById('width-input');
 const heightInput = document.getElementById('height-input');
 const themeButtons = document.querySelectorAll('.theme-btn');
@@ -11,6 +11,31 @@ let currentSettings = null;
 let currentHostname = null;
 
 async function init() {
+  // Set OS-specific labels
+  const isMac = navigator.platform.toUpperCase().includes('MAC');
+  document.getElementById('alt-hover-btn').textContent = isMac ? '⌥ + Hover' : 'Alt + Hover';
+
+  // Load current note shortcut
+  const commands = await chrome.commands.getAll();
+  const noteCmd = commands.find(c => c.name === 'open-note');
+  const shortcutEl = document.getElementById('note-shortcut');
+  if (noteCmd?.shortcut) {
+    // Format shortcut for display (e.g., "MacCtrl+N" → "⌃N", "Alt+N" → "Alt+N")
+    let display = noteCmd.shortcut;
+    if (isMac) {
+      display = display.replace('MacCtrl', '⌃').replace('Ctrl', '⌃').replace('Alt', '⌥').replace('Shift', '⇧').replace('Command', '⌘').replace(/\+/g, '');
+    }
+    shortcutEl.textContent = display;
+  } else {
+    shortcutEl.textContent = 'Not set';
+  }
+
+  // Change shortcuts link
+  document.getElementById('change-shortcuts').addEventListener('click', (e) => {
+    e.preventDefault();
+    chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
+  });
+
   // Get current tab's hostname
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab?.url) {
@@ -30,8 +55,10 @@ async function init() {
   const siteEnabled = !disabledSites.includes(currentHostname);
   setToggleState(siteToggle, siteEnabled);
 
-  // Modifier toggle
-  setToggleState(modifierToggle, currentSettings.requireModifier);
+  // Trigger mode buttons
+  modeButtons.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === currentSettings.triggerMode);
+  });
 
   // Size inputs
   widthInput.value = currentSettings.defaultWidth;
@@ -61,11 +88,13 @@ async function init() {
     await setDisabledSites(sites);
   });
 
-  modifierToggle.addEventListener('click', async () => {
-    const isActive = modifierToggle.classList.contains('active');
-    currentSettings.requireModifier = !isActive;
-    setToggleState(modifierToggle, !isActive);
-    await saveSettings(currentSettings);
+  modeButtons.forEach(btn => {
+    btn.addEventListener('click', async () => {
+      modeButtons.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentSettings.triggerMode = btn.dataset.mode;
+      await saveSettings(currentSettings);
+    });
   });
 
   widthInput.addEventListener('change', async () => {
@@ -92,6 +121,10 @@ async function init() {
       applyPopupTheme(currentSettings.theme);
       await saveSettings(currentSettings);
     });
+  });
+
+  document.getElementById('open-notes-btn').addEventListener('click', () => {
+    chrome.runtime.openOptionsPage();
   });
 }
 

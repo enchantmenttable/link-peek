@@ -1,12 +1,12 @@
 export function initDrag(titleBar, panel, onDragStart) {
-  let isDragging = false;
+  const state = { dragging: false };
   let startX, startY, startLeft, startTop;
 
   titleBar.addEventListener('mousedown', (e) => {
     // Don't drag if clicking a button
     if (e.target.closest('button')) return;
 
-    isDragging = true;
+    state.dragging = true;
     startX = e.clientX;
     startY = e.clientY;
 
@@ -19,7 +19,7 @@ export function initDrag(titleBar, panel, onDragStart) {
   });
 
   document.addEventListener('mousemove', (e) => {
-    if (!isDragging) return;
+    if (!state.dragging) return;
 
     const dx = e.clientX - startX;
     const dy = e.clientY - startY;
@@ -31,6 +31,8 @@ export function initDrag(titleBar, panel, onDragStart) {
   });
 
   document.addEventListener('mouseup', () => {
-    isDragging = false;
+    state.dragging = false;
   });
+
+  return state;
 }

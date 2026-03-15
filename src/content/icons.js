@@ -1,4 +1,4 @@
-import { Pin, PinOff, X, createElement } from 'lucide';
+import { Pin, PinOff, X, StickyNote, createElement } from 'lucide';
 
 export function createIcon(iconData, size = 16) {
   return createElement(iconData, {
@@ -8,4 +8,4 @@ export function createIcon(iconData, size = 16) {
   });
 }
 
-export { Pin, PinOff, X };
+export { Pin, PinOff, X, StickyNote };

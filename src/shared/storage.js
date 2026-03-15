@@ -34,3 +34,48 @@ export async function toggleSite(hostname) {
   await setDisabledSites(sites);
   return index === -1; // returns true if site was disabled (added)
 }
+
+// Notes — keyed by normalised URL (origin + pathname, no query/hash)
+export function normalizeUrl(url) {
+  try {
+    const u = new URL(url);
+    return u.origin + u.pathname;
+  } catch {
+    return url;
+  }
+}
+
+export async function getNotes() {
+  const result = await chrome.storage.local.get(STORAGE_KEYS.NOTES);
+  const notes = result[STORAGE_KEYS.NOTES];
+  // Migration: old format was an array, new format is an object keyed by URL
+  if (Array.isArray(notes)) {
+    await chrome.storage.local.set({ [STORAGE_KEYS.NOTES]: {} });
+    return {};
+  }
+  return notes || {};
+}
+
+export async function getNoteForUrl(url) {
+  const notes = await getNotes();
+  return notes[normalizeUrl(url)] || null;
+}
+
+export async function saveNoteForUrl(url, { title, content }) {
+  const notes = await getNotes();
+  const key = normalizeUrl(url);
+  const existing = notes[key];
+  notes[key] = {
+    title: title || '',
+    content,
+    createdAt: existing?.createdAt || Date.now(),
+    updatedAt: Date.now(),
+  };
+  await chrome.storage.local.set({ [STORAGE_KEYS.NOTES]: notes });
+}
+
+export async function deleteNoteForUrl(url) {
+  const notes = await getNotes();
+  delete notes[normalizeUrl(url)];
+  await chrome.storage.local.set({ [STORAGE_KEYS.NOTES]: notes });
+}

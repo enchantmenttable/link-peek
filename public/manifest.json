@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "Link Peek",
+  "name": "Marginalia - Link Peek & Page Note",
   "version": "1.0.0",
-  "description": "Hover over links to preview their content in reading mode",
-  "permissions": ["storage"],
+  "description": "Preview links on hover and take notes on any page",
+  "permissions": ["storage", "contextMenus"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"
@@ -27,5 +27,14 @@
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
+  },
+  "options_page": "options.html",
+  "commands": {
+    "open-note": {
+      "suggested_key": {
+        "default": "Alt+N"
+      },
+      "description": "Open or create note for current page"
+    }
   }
 }

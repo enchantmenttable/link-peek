@@ -1,5 +1,33 @@
 import { MSG } from '../shared/constants.js';
 
+// Context menu for links
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.create({
+    id: 'peek-link',
+    title: 'Open in Peek Panel',
+    contexts: ['link'],
+  });
+});
+
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId === 'peek-link' && info.linkUrl && tab?.id) {
+    chrome.tabs.sendMessage(tab.id, {
+      type: MSG.OPEN_PEEK_PANEL,
+      url: info.linkUrl,
+    });
+  }
+});
+
+// Keyboard shortcut commands
+chrome.commands.onCommand.addListener(async (command) => {
+  if (command === 'open-note') {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab?.id) {
+      chrome.tabs.sendMessage(tab.id, { type: MSG.OPEN_PAGE_NOTE });
+    }
+  }
+});
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === MSG.FETCH_URL) {
     handleFetchUrl(message.url).then(sendResponse);
@@ -20,7 +48,8 @@ async function handleFetchUrl(url) {
     const response = await fetch(url, {
       signal: controller.signal,
       headers: {
-        'Accept': 'text/html,application/xhtml+xml',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
       },
     });
     clearTimeout(timeoutId);

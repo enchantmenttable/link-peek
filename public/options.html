@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Marginalia - Notebook</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <div id="list-view">
+      <div class="page-header">
+        <h1>Notebook</h1>
+        <span class="note-count" id="note-count"></span>
+      </div>
+      <div class="toolbar" id="list-toolbar" style="display:none">
+        <div class="search-box">
+          <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="search-input" placeholder="Search notes...">
+        </div>
+        <div class="toolbar-spacer"></div>
+        <select id="sort-select" class="sort-select">
+          <option value="modified">Last updated</option>
+          <option value="created">Last created</option>
+        </select>
+        <button id="export-all-btn" class="btn" title="Export all notes">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export All
+        </button>
+      </div>
+      <div id="notes-list"></div>
+      <div id="empty-state" class="empty-state hidden">No notes yet</div>
+    </div>
+
+    <div id="editor-view" class="hidden">
+      <div class="toolbar">
+        <button id="back-btn" class="btn btn-back">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          Back
+        </button>
+        <div class="toolbar-spacer"></div>
+        <button id="export-note-btn" class="btn" title="Export note">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </button>
+        <button id="delete-note-btn" class="btn btn-danger">Delete</button>
+      </div>
+      <div id="note-url" class="note-url"></div>
+      <input type="text" id="note-title" placeholder="Note title...">
+      <textarea id="note-content" placeholder="Write your note..."></textarea>
+    </div>
+  </div>
+
+  <div id="undo-toast" class="undo-toast hidden">
+    <span>Note deleted</span>
+    <button id="undo-btn" class="undo-btn">Undo</button>
+    <div class="undo-timer"><div class="undo-timer-bar" id="undo-timer-bar"></div></div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>
